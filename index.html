@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Sensör Paneli - Yağmur Şanlıgil</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e2f;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #4CAF50;
+            text-align: center;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #a0a0b0;
+            font-size: 0.9em;
+            margin-top: -15px;
+            margin-bottom: 30px;
+        }
+
+        .dashboard {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background-color: #2a2a40;
+            border-radius: 10px;
+            padding: 20px;
+            width: 200px;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .value {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .temp-normal {
+            color: #ff9800;
+        }
+
+        .temp-kritik {
+            color: #f44336;
+            animation: blink 1s infinite;
+        }
+
+        .humidity {
+            color: #00bcd4;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        table {
+            width: 80%;
+            max-width: 800px;
+            border-collapse: collapse;
+            background-color: #2a2a40;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            text-align: center;
+            border-bottom: 1px solid #3f3f5a;
+        }
+
+        th {
+            background-color: #3f3f5a;
+            color: #4CAF50;
+        }
+
+        tr:hover {
+            background-color: #35354f;
+        }
+
+        .status-kritik {
+            background-color: #f44336;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.8em;
+        }
+
+        .status-normal {
+            background-color: #4CAF50;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Bulut Bilişim IoT Projesi</h1>
+    <div class="subtitle">Geliştirici: Yağmur Şanlıgil | AWS Serverless Mimarisi</div>
+
+    <div class="dashboard">
+        <div class="card">
+            <h3>Sıcaklık</h3>
+            <div id="latest-temp" class="value temp-normal">--°C</div>
+            <div id="temp-status">Bekleniyor...</div>
+        </div>
+        <div class="card">
+            <h3>Nem</h3>
+            <div id="latest-humidity" class="value humidity">--%</div>
+            <div>Bağıl Nem</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Cihaz ID</th>
+                <th>Zaman (UTC)</th>
+                <th>Sıcaklık (°C)</th>
+                <th>Nem (%)</th>
+                <th>Sistem Durumu</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            <tr>
+                <td colspan="5">Veriler AWS'den çekiliyor...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+        // Senin AWS API Gateway Köprü Adresin (Sonuna Lambda yolunu ekledik)
+        const API_URL = "https://r8bby4imh3.execute-api.eu-north-1.amazonaws.com/HavaDurumuOkuyucu";
+
+        async function verileriGetir() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    ekraniGuncelle(data);
+                }
+            } catch (error) {
+                console.error("AWS Bağlantı Hatası:", error);
+            }
+        }
+
+        function ekraniGuncelle(veriler) {
+            // En güncel veri (Listenin en üstündeki)
+            const sonVeri = veriler[0];
+            const tempElement = document.getElementById('latest-temp');
+            const statusElement = document.getElementById('temp-status');
+
+            // Sıcaklık kartını güncelle
+            tempElement.innerText = sonVeri.sicaklik + "°C";
+            document.getElementById('latest-humidity').innerText = sonVeri.nem + "%";
+
+            // Kritik durum kontrolü
+            if (sonVeri.durum === "KRITIK") {
+                tempElement.className = "value temp-kritik";
+                statusElement.innerHTML = "<span class='status-kritik'>KRİTİK SEVİYE!</span>";
+            } else {
+                tempElement.className = "value temp-normal";
+                statusElement.innerHTML = "<span class='status-normal'>NORMAL</span>";
+            }
+
+            // Tabloyu güncelle
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = ""; // Eski verileri temizle
+
+            veriler.forEach(veri => {
+                // Zaman damgasını güzelleştir
+                let tarih = new Date(veri.timestamp).toLocaleTimeString('tr-TR');
+                let durumEtiketi = veri.durum === "KRITIK" ? "<span class='status-kritik'>KRİTİK</span>" : "<span class='status-normal'>NORMAL</span>";
+
+                let row = `<tr>
+                    <td>${veri.cihaz_id}</td>
+                    <td>${tarih}</td>
+                    <td>${veri.sicaklik}</td>
+                    <td>${veri.nem}</td>
+                    <td>${durumEtiketi}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Sayfa açıldığında hemen veriyi çek
+        verileriGetir();
+
+        // Sonra her 5 saniyede bir AWS'ye sorarak ekranı canlı tut
+        setInterval(verileriGetir, 5000);
+    </script>
+</body>
+
+</html>
